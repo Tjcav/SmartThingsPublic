@@ -32,7 +32,7 @@ preferences {
 		input "maxOpenTime", "number", title: "Minutes?"
 	}
 	section("Close this garage door...") {
-		input "Garage Door", "capability.Lock Capability", title: "Which?"
+		input "Garage Door", "capability.Door Control", title: "Which?"
 	}
 }
 
