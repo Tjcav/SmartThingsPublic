@@ -26,31 +26,45 @@ definition(
 
 preferences {
 	section("When the garage door is open...") {
-		input "Garage Door Sensor", "capability.Contact Sensor", title: "Which?"
+		input "doorSensor", "capability.Contact Sensor", title: "Which?"
 	}
 	section("For too long...") {
 		input "maxOpenTime", "number", title: "Minutes?"
 	}
 	section("Close this garage door...") {
-		input "Garage Door", "capability.Door Control", title: "Which?"
+		input "door", "capability.Door Control", title: "Which?"
 	}
 }
 
 def installed()
 {
-	subscribe(multisensor, "acceleration", accelerationHandler)
+	subscribe(doorSensor, "door", doorSensorHandler)
 }
 
 def updated()
 {
 	unsubscribe()
-	subscribe(multisensor, "acceleration", accelerationHandler)
+	subscribe(doorSensor, "door", doorSensorHandler)
 }
 
-def accelerationHandler(evt) {
+def doorSensorHandler(evt) {
+
+	def status = garageDoor.currentValue("status")
+    log.debug "Door Sensor Status Updated: $status"
+
+	garageDoor.each {
+		if (status == "open") {
+			it.close()
+		}
+		else {
+			it.open()
+		}
+	}
+
+
 	def latestThreeAxisState = multisensor.threeAxisState // e.g.: 0,0,-1000
 	if (latestThreeAxisState) {
-		def isOpen = Math.abs(latestThreeAxisState.xyzValue.z) > 250 // TODO: Test that this value works in most cases...
+		def isOpen = doorSensor.
 		def isNotScheduled = state.status != "scheduled"
 
 		if (!isOpen) {
