@@ -26,7 +26,7 @@ definition(
 
 preferences {
 	section("When the garage door is open...") {
-		input "multisensor", "capability.threeAxis", title: "Which?"
+		input "multisensor", "capability.Contact Sensor", title: "Which?"
 	}
 	section("For too long...") {
 		input "maxOpenTime", "number", title: "Minutes?"
