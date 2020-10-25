@@ -26,9 +26,12 @@ definition(
 
 preferences {
 	section("Select a Garage Door") {
-		input "door", "capability.Door Control", title: "Which?"
+		input "door1", "capability.Door Control", title: "Which?"
 	}
-    //TODO: add a second garage door
+    section("Select a Garage Door") {
+		input "door2", "capability.Door Control", title: "Which?"
+	}
+
 	section("Close after...") {
 		input "maxOpenTime", "number", title: "Minutes?"
 	}
@@ -36,13 +39,23 @@ preferences {
 
 def installed()
 {
-	subscribe(door, "door", doorHandler)
+	subscribe(door1, "door", doorHandler)
+	subscribe(door2, "door", doorHandler)
+    initialize()
+}
+
+def initialize()
+{
+	state.status = [:]
+    state.status[door1.getId()] = "null"
+    state.status[door2.getId()] = "null"
 }
 
 def updated()
 {
 	unsubscribe()
-	subscribe(door, "door", doorHandler)
+	subscribe(door1, "door", doorHandler)
+    subscribe(door2, "door", doorHandler)
 }
 
 private currentStatus(devices, attribute) {
@@ -61,34 +74,52 @@ private currentStatus(devices, attribute) {
 }
 
 def doorHandler(evt) {
-
-	def status = currentStatus(door, "door")
+	def device = evt.getDevice()
+	def status = currentStatus(device, "door")
     log.debug "Door Status: $status"
-    def isNotScheduled = state.status != "scheduled"
+    def isNotScheduled = state.status[evt.device.getId()] != "scheduled"
 	def isOpen = status == "open"
 
 	if (!isopen) {
-        clearStatus()
+        clearStatus(device)
     }
 
     if (isOpen && isNotScheduled) {
-        runIn(maxOpenTime * 60, takeAction, [overwrite: false])
-        state.status = "scheduled"
-        log.debug "Scheduled to close $door in $maxOpenTime min."
+        if (device.getId() == door1.getId()) {
+        	runIn(maxOpenTime * 60, takeAction1, [overwrite: true])
+            state.status[device.getId()] = "scheduled"
+            log.debug "Scheduled to close $device in $maxOpenTime min."
+        }
+        else if (device.getId() == door2.getId()) {
+        	runIn(maxOpenTime * 60, takeAction2, [overwrite: true])
+            state.status[device.getId()] = "scheduled"
+	        log.debug "Scheduled to close $device in $maxOpenTime min."
+        }
+        else {
+        	log.warn "Device not found"
+        }
     }
 }
 
-def takeAction(){
+def takeAction1(){
+	takeAction(door1)
+}
+
+def takeAction2(){
+	takeAction(door2)
+}
+
+def takeAction(device){
 	log.trace "Take Action"
-	if (state.status == "scheduled")
+	if (state.status[device.getId()] == "scheduled")
 	{
     	log.trace "Close Door"
-    	door.close()
+    	device.close()
 	} else {
 		log.trace "Status is no longer scheduled."
 	}
 }
 
-def clearStatus() {
-	state.status = null
+def clearStatus(device) {
+    state.status[device.getId()] = "null"
 }
