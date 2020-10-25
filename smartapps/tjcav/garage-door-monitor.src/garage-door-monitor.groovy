@@ -18,119 +18,75 @@ definition(
     name: "Garage Door Monitor",
     namespace: "Tjcav",
     author: "Thomas Cavaliere",
-    description: "Monitor your garage door and close it if it is open too long",
+    description: "Monitor garage door and close it if it is open too long",
     category: "Safety & Security",
     iconUrl: "https://s3.amazonaws.com/smartapp-icons/Meta/garage_contact.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Meta/garage_contact@2x.png"
 )
 
 preferences {
-	section("When the garage door is open...") {
-		input "doorSensor", "capability.Contact Sensor", title: "Which?"
-	}
-	section("For too long...") {
-		input "maxOpenTime", "number", title: "Minutes?"
-	}
-	section("Close this garage door...") {
+	section("Select a Garage Door") {
 		input "door", "capability.Door Control", title: "Which?"
+	}
+    //TODO: add a second garage door
+	section("Close after...") {
+		input "maxOpenTime", "number", title: "Minutes?"
 	}
 }
 
 def installed()
 {
-	subscribe(doorSensor, "door", doorSensorHandler)
+	subscribe(door, "door", doorHandler)
 }
 
 def updated()
 {
 	unsubscribe()
-	subscribe(doorSensor, "door", doorSensorHandler)
+	subscribe(door, "door", doorHandler)
 }
 
-def doorSensorHandler(evt) {
+private currentStatus(devices, attribute) {
+	log.trace "currentStatus($devices, $attribute)"
+	def result = null
+    def map = [:]
+    devices.each {
+        def value = it.currentValue(attribute)
+        map[value] = (map[value] ?: 0) + 1
+        log.trace "$it.displayName: $value"
+    }
+    log.trace map
+    result = map.collect{it}.sort{it.value}[-1].key
+    log.debug "$attribute = $result"
+    result
+}
 
-	def status = garageDoor.currentValue("status")
-    log.debug "Door Sensor Status Updated: $status"
+def doorHandler(evt) {
 
-	garageDoor.each {
-		if (status == "open") {
-			it.close()
-		}
-		else {
-			it.open()
-		}
-	}
+	def status = currentStatus(door, "door")
+    log.debug "Door Status: $status"
+    def isNotScheduled = state.status != "scheduled"
+	def isOpen = status == "open"
 
+	if (!isopen) {
+        clearStatus()
+    }
 
-	def latestThreeAxisState = multisensor.threeAxisState // e.g.: 0,0,-1000
-	if (latestThreeAxisState) {
-		def isOpen = doorSensor.
-		def isNotScheduled = state.status != "scheduled"
-
-		if (!isOpen) {
-			clearSmsHistory()
-			clearStatus()
-		}
-
-		if (isOpen && isNotScheduled) {
-			runIn(maxOpenTime * 60, takeAction, [overwrite: false])
-			state.status = "scheduled"
-		}
-
-	}
-	else {
-		log.warn "COULD NOT FIND LATEST 3-AXIS STATE FOR: ${multisensor}"
-	}
+    if (isOpen && isNotScheduled) {
+        runIn(maxOpenTime * 60, takeAction, [overwrite: false])
+        state.status = "scheduled"
+        log.debug "Scheduled to close $door in $maxOpenTime min."
+    }
 }
 
 def takeAction(){
+	log.trace "Take Action"
 	if (state.status == "scheduled")
 	{
-		def deltaMillis = 1000 * 60 * maxOpenTime
-		def timeAgo = new Date(now() - deltaMillis)
-		def openTooLong = multisensor.threeAxisState.dateCreated.toSystemDate() < timeAgo
-
-		def recentTexts = state.smsHistory.find { it.sentDate.toSystemDate() > timeAgo }
-
-		if (!recentTexts) {
-			sendTextMessage()
-		}
-		runIn(maxOpenTime * 60, takeAction, [overwrite: false])
+    	log.trace "Close Door"
+    	door.close()
 	} else {
-		log.trace "Status is no longer scheduled. Not sending text."
+		log.trace "Status is no longer scheduled."
 	}
-}
-
-def sendTextMessage() {
-	log.debug "$multisensor was open too long, texting phone"
-
-	updateSmsHistory()
-	def openMinutes = maxOpenTime * (state.smsHistory?.size() ?: 1)
-	def msg = "Your ${multisensor.label ?: multisensor.name} has been open for more than ${openMinutes} minutes!"
-    if (location.contactBookEnabled) {
-        sendNotificationToContacts(msg, recipients)
-    }
-    else {
-        if (phone) {
-            sendSms(phone, msg)
-        } else {
-            sendPush msg
-        }
-    }
-}
-
-def updateSmsHistory() {
-	if (!state.smsHistory) state.smsHistory = []
-
-	if(state.smsHistory.size() > 9) {
-		log.debug "SmsHistory is too big, reducing size"
-		state.smsHistory = state.smsHistory[-9..-1]
-	}
-	state.smsHistory << [sentDate: new Date().toSystemFormat()]
-}
-
-def clearSmsHistory() {
-	state.smsHistory = null
 }
 
 def clearStatus() {
